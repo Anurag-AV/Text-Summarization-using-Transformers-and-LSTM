@@ -2,9 +2,9 @@ import torch
 
 class ConfigLSTM:
     # Data parameters
-    train_file = 'C:/Users/hp/Downloads/archive (1)/cnn_dailymail/train.csv'
-    val_file = 'C:/Users/hp/Downloads/archive (1)/cnn_dailymail/validation.csv'
-    test_file = 'C:/Users/hp/Downloads/archive (1)/cnn_dailymail/test.csv'
+    train_file = '../data/train.csv'
+    val_file = '../data/validation.csv'
+    test_file = '../data/test.csv'
 
     # BPE Tokenizer parameters
     vocab_size = 50000
@@ -22,15 +22,15 @@ class ConfigLSTM:
     # Training parameters
     batch_size = 64
     learning_rate = 0.001
-    n_epochs = 15
+    n_epochs = 3
     gradient_clip = 1.0
     label_smoothing = 0.1
     gradient_accumulation_steps = 1
 
     # Data sampling for faster training
-    max_train_samples = 50000
-    max_val_samples = 5000
-    max_test_samples = 5000
+    max_train_samples = 100
+    max_val_samples = 50
+    max_test_samples = 50
 
     # Generation parameters
     beam_size = 5

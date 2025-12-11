@@ -38,8 +38,19 @@ class BeamSearchLSTM:
         beams = [(torch.tensor([self.sos_id], device=device), 0.0, hidden, cell)]
         completed_beams = []
 
-        # Create mask
-        mask = (src != 0)
+        # FIX: Create mask that matches encoder_outputs dimensions
+        # encoder_outputs has shape (batch_size, actual_seq_len, hidden_dim)
+        # The actual_seq_len comes from the unpacked sequence
+        actual_seq_len = encoder_outputs.size(1)
+        
+        # Create mask based on actual sequence length from encoder outputs
+        # mask should be (batch_size, actual_seq_len)
+        mask = torch.ones(batch_size, actual_seq_len, dtype=torch.bool, device=device)
+        
+        # Set positions beyond the actual source length to False (will be masked)
+        src_len = src_lens[0].item()
+        if src_len < actual_seq_len:
+            mask[:, src_len:] = False
 
         for step in range(self.max_len - 1):
             candidates = []

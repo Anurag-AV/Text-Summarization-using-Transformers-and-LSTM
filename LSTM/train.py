@@ -206,18 +206,17 @@ def plot_training_curves(train_losses, val_losses, save_path='training_curves_ls
     # Also display if in notebook
     try:
         from IPython.display import display
+        display(fig)
         plt.show()
-    except:
+    except ImportError:
         pass
-    
-    plt.close()
 
 
 # ============================================================================
-# CHECKPOINT LOADING AND SAVING
+# CHECKPOINT MANAGEMENT
 # ============================================================================
 def save_checkpoint(epoch, model, optimizer, scheduler, scaler, val_loss, train_losses, val_losses, config):
-    """Save training checkpoint"""
+    """Save checkpoint"""
     checkpoint = {
         'epoch': epoch,
         'model_state_dict': model.state_dict(),
@@ -225,155 +224,108 @@ def save_checkpoint(epoch, model, optimizer, scheduler, scaler, val_loss, train_
         'scheduler_state_dict': scheduler.state_dict() if scheduler else None,
         'scaler_state_dict': scaler.state_dict() if scaler else None,
         'val_loss': val_loss,
-        'train_losses': train_losses,  # Save loss history
-        'val_losses': val_losses,      # Save validation loss history
-        'config': {
-            'embedding_dim': config.embedding_dim,
-            'hidden_dim': config.hidden_dim,
-            'n_layers': config.n_layers,
-            'vocab_size': config.vocab_size,
-            'dropout': config.dropout,
-            'bidirectional': config.bidirectional
-        }
+        'train_losses': train_losses,
+        'val_losses': val_losses
     }
-
-    temp_file = config.model_file + '.tmp'
-    try:
-        torch.save(checkpoint, temp_file)
-        if os.path.exists(config.model_file):
-            os.replace(temp_file, config.model_file)
-        else:
-            os.rename(temp_file, config.model_file)
-        print(f"✓ Checkpoint saved to {config.model_file}")
-    except Exception as e:
-        print(f"✗ Error saving checkpoint: {e}")
-        if os.path.exists(temp_file):
-            os.remove(temp_file)
+    torch.save(checkpoint, config.model_file)
+    print(f"✓ Best model saved to {config.model_file} (Val Loss: {val_loss:.4f})")
 
 
 def load_checkpoint(model, optimizer, scheduler, scaler, config):
-    """Load training checkpoint if it exists"""
-    if not os.path.exists(config.model_file):
-        print("No checkpoint found. Starting training from scratch.")
-        return 0, float('inf'), [], []
-
-    print(f"Loading checkpoint from {config.model_file}...")
-
-    try:
-        checkpoint = torch.load(config.model_file, map_location=config.device, weights_only=False)
-
+    """Load checkpoint if exists"""
+    if os.path.exists(config.model_file):
+        print(f"Found existing checkpoint: {config.model_file}")
+        checkpoint = torch.load(config.model_file, weights_only=False)
         model.load_state_dict(checkpoint['model_state_dict'])
-        print("✓ Model state loaded")
-
         optimizer.load_state_dict(checkpoint['optimizer_state_dict'])
-        print("✓ Optimizer state loaded")
-
+        
         if scheduler and checkpoint.get('scheduler_state_dict'):
             scheduler.load_state_dict(checkpoint['scheduler_state_dict'])
-            print("✓ Scheduler state loaded")
-
+        
         if scaler and checkpoint.get('scaler_state_dict'):
             scaler.load_state_dict(checkpoint['scaler_state_dict'])
-            print("✓ Scaler state loaded")
-
-        start_epoch = checkpoint['epoch'] + 1
-        best_val_loss = checkpoint.get('val_loss', float('inf'))
         
-        # Load loss histories (with defaults for backward compatibility)
+        start_epoch = checkpoint['epoch'] + 1
+        best_val_loss = checkpoint['val_loss']
         train_losses = checkpoint.get('train_losses', [])
         val_losses = checkpoint.get('val_losses', [])
-
-        print(f"✓ Resuming from epoch {start_epoch}")
-        print(f"✓ Best validation loss: {best_val_loss:.4f}")
-        print(f"✓ Loaded {len(train_losses)} training loss records")
-
+        
+        print(f"Resuming from epoch {start_epoch} (Best Val Loss: {best_val_loss:.4f})")
         return start_epoch, best_val_loss, train_losses, val_losses
-
-    except Exception as e:
-        print(f"✗ Error loading checkpoint: {e}")
-        backup_file = config.model_file + '.corrupted'
-        print(f"Creating backup at: {backup_file}")
-        try:
-            os.rename(config.model_file, backup_file)
-            print("✓ Corrupted checkpoint backed up.")
-        except:
-            print("✗ Could not backup corrupted file. Deleting it.")
-            os.remove(config.model_file)
-
-        print("Starting training from scratch.")
+    else:
+        print("No existing checkpoint found. Starting from scratch.")
         return 0, float('inf'), [], []
 
 
 # ============================================================================
-# MAIN EXECUTION
+# MAIN FUNCTION
 # ============================================================================
 def main():
+    print("\n" + "=" * 80)
+    print("LSTM SUMMARIZATION TRAINING")
     print("=" * 80)
-    print("LSTM TEXT SUMMARIZATION WITH ATTENTION")
-    print("=" * 80)
-    print(f"Device: {config.device}")
-    print(f"Model: {config.n_layers}-layer {'Bidirectional' if config.bidirectional else 'Unidirectional'} LSTM")
     print()
 
-    # Load or train tokenizer
-    print("Step 1: Loading/Training Tokenizer")
+    # Print device information
+    print("Device Information:")
     print("-" * 80)
+    print(f"PyTorch version: {torch.__version__}")
+    print(f"CUDA available: {torch.cuda.is_available()}")
+    if torch.cuda.is_available():
+        print(f"CUDA version: {torch.version.cuda}")
+        print(f"Current device: {torch.cuda.current_device()}")
+        print(f"Device name: {torch.cuda.get_device_name(0)}")
+        print(f"Device count: {torch.cuda.device_count()}")
+    print(f"Using device: {config.device}")
+    print()
 
-    tokenizer = None
-    if os.path.exists(config.tokenizer_file):
-        try:
-            print(f"Loading tokenizer from {config.tokenizer_file}")
-            tokenizer = BPETokenizer.load(config.tokenizer_file)
-            print("Tokenizer loaded successfully!")
-        except (KeyError, EOFError, pickle.UnpicklingError) as e:
-            print(f"Error loading tokenizer: {e}")
-            print("Deleting corrupted tokenizer file and training new one...")
-            os.remove(config.tokenizer_file)
-            tokenizer = None
+    # FIX: Convert device string to torch.device object
+    device = torch.device(config.device)
+    print(f"Device object: {device}")
+    print()
 
-    if tokenizer is None:
-        print("Training new tokenizer...")
-        train_df = pd.read_csv(config.train_file)
-        texts = train_df['article'].tolist() + train_df['highlights'].tolist()
-        tokenizer = BPETokenizer(vocab_size=config.vocab_size)
-        tokenizer.train(texts)
-        tokenizer.save(config.tokenizer_file)
-        print(f"Tokenizer saved to {config.tokenizer_file}")
-
+    # Load tokenizer
+    print("Step 1: Loading BPE Tokenizer")
+    print("-" * 80)
+    tokenizer = BPETokenizer.load(config.tokenizer_file)
+    print(f"Tokenizer loaded from {config.tokenizer_file}")
     print(f"Vocabulary size: {len(tokenizer.vocab)}")
     print()
 
-    # Load datasets
-    print("Step 2: Loading Datasets")
+    # Load data
+    print("Step 2: Loading Data")
     print("-" * 80)
 
-    train_df = pd.read_csv(config.train_file)
-    val_df = pd.read_csv(config.val_file)
-    test_df = pd.read_csv(config.test_file)
+    train_data = pd.read_csv(config.train_file, nrows=config.max_train_samples)
+    val_data = pd.read_csv(config.val_file, nrows=config.max_val_samples)
+    test_data = pd.read_csv(config.test_file, nrows=config.max_test_samples)
 
-    if len(train_df) > config.max_train_samples:
-        print(f"Sampling {config.max_train_samples} from {len(train_df)} training samples...")
-        train_df = train_df.sample(n=config.max_train_samples, random_state=42)
-
-    if len(val_df) > config.max_val_samples:
-        print(f"Sampling {config.max_val_samples} from {len(val_df)} validation samples...")
-        val_df = val_df.sample(n=config.max_val_samples, random_state=42)
-
-    if len(test_df) > config.max_test_samples:
-        print(f"Sampling {config.max_test_samples} from {len(test_df)} test samples...")
-        test_df = test_df.sample(n=config.max_test_samples, random_state=42)
-
-    print(f"Train samples: {len(train_df)}")
-    print(f"Validation samples: {len(val_df)}")
-    print(f"Test samples: {len(test_df)}")
+    print(f"Train samples: {len(train_data)}")
+    print(f"Val samples: {len(val_data)}")
+    print(f"Test samples: {len(test_data)}")
     print()
 
-    # Create datasets
-    train_dataset = SummarizationDataset(train_df, tokenizer, config.max_seq_len, config.max_summary_len)
-    val_dataset = SummarizationDataset(val_df, tokenizer, config.max_seq_len, config.max_summary_len)
-    test_dataset = SummarizationDataset(test_df, tokenizer, config.max_seq_len, config.max_summary_len)
+    train_dataset = SummarizationDataset(
+        train_data,
+        tokenizer,
+        max_seq_len=config.max_seq_len,
+        max_summary_len=config.max_summary_len
+    )
 
-    # Create dataloaders
+    val_dataset = SummarizationDataset(
+        val_data,
+        tokenizer,
+        max_seq_len=config.max_seq_len,
+        max_summary_len=config.max_summary_len
+    )
+
+    test_dataset = SummarizationDataset(
+        test_data,
+        tokenizer,
+        max_seq_len=config.max_seq_len,
+        max_summary_len=config.max_summary_len
+    )
+
     train_loader = DataLoader(
         train_dataset,
         batch_size=config.batch_size,
@@ -383,6 +335,7 @@ def main():
         pin_memory=config.pin_memory,
         persistent_workers=True if config.num_workers > 0 else False
     )
+
     val_loader = DataLoader(
         val_dataset,
         batch_size=config.batch_size,
@@ -392,6 +345,7 @@ def main():
         pin_memory=config.pin_memory,
         persistent_workers=True if config.num_workers > 0 else False
     )
+
     test_loader = DataLoader(
         test_dataset,
         batch_size=config.batch_size,
@@ -424,12 +378,16 @@ def main():
         bidirectional_encoder=config.bidirectional
     )
 
-    model = Seq2Seq(encoder, decoder, config.device).to(config.device)
+    # FIX: Pass device object instead of string
+    model = Seq2Seq(encoder, decoder, device).to(device)
 
     total_params = sum(p.numel() for p in model.parameters())
     trainable_params = sum(p.numel() for p in model.parameters() if p.requires_grad)
     print(f"Total parameters: {total_params:,}")
     print(f"Trainable parameters: {trainable_params:,}")
+    
+    # Verify model is on correct device
+    print(f"Model is on device: {next(model.parameters()).device}")
     print()
 
     # Training setup
@@ -475,12 +433,13 @@ def main():
     for epoch in range(start_epoch, config.n_epochs):
         print(f"\nEpoch {epoch + 1}/{config.n_epochs}")
 
-        train_loss = train_epoch(model, train_loader, optimizer, criterion, config.device, config, scaler)
-        train_losses.append(train_loss)  # Track training loss
+        # FIX: Pass device object instead of accessing config.device
+        train_loss = train_epoch(model, train_loader, optimizer, criterion, device, config, scaler)
+        train_losses.append(train_loss)
 
         if (epoch + 1) % config.validate_every_n_epochs == 0:
-            val_loss = validate(model, val_loader, criterion, config.device, config)
-            val_losses.append(val_loss)  # Track validation loss
+            val_loss = validate(model, val_loader, criterion, device, config)
+            val_losses.append(val_loss)
             print(f"Train Loss: {train_loss:.4f} | Val Loss: {val_loss:.4f}")
 
             if scheduler:
@@ -491,7 +450,7 @@ def main():
                 save_checkpoint(epoch, model, optimizer, scheduler, scaler, val_loss, 
                               train_losses, val_losses, config)
         else:
-            val_losses.append(None)  # No validation this epoch
+            val_losses.append(None)
             print(f"Train Loss: {train_loss:.4f}")
 
     print()
@@ -541,9 +500,10 @@ def main():
         if batch_count >= config.max_generation_batches:
             break
 
-        src = batch['article'].to(config.device)
-        tgt = batch['summary'].to(config.device)
-        src_lens = batch['article_lens'].to(config.device)
+        # FIX: Use device object
+        src = batch['article'].to(device)
+        tgt = batch['summary'].to(device)
+        src_lens = batch['article_lens'].to(device)
 
         # Generate summaries
         with torch.no_grad():
@@ -587,7 +547,7 @@ def main():
     print()
 
     # Display top examples
-    print(f"Step 8: Top {config.top_k_summaries} Generated Summaries")
+    print(f"Step 9: Top {config.top_k_summaries} Generated Summaries")
     print("=" * 80)
 
     for i, example in enumerate(examples, 1):
