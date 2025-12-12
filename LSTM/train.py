@@ -308,21 +308,21 @@ def main():
     train_dataset = SummarizationDataset(
         train_data,
         tokenizer,
-        max_seq_len=config.max_seq_len,
+        max_article_len=config.max_seq_len,
         max_summary_len=config.max_summary_len
     )
 
     val_dataset = SummarizationDataset(
         val_data,
         tokenizer,
-        max_seq_len=config.max_seq_len,
+        max_article_len=config.max_seq_len,
         max_summary_len=config.max_summary_len
     )
 
     test_dataset = SummarizationDataset(
         test_data,
         tokenizer,
-        max_seq_len=config.max_seq_len,
+        max_article_len=config.max_seq_len,
         max_summary_len=config.max_summary_len
     )
 

@@ -40,16 +40,16 @@ class Config:
     # Training parameters (adjusted for deeper network)
     batch_size = 24  # Slightly reduced due to increased memory from deeper model
     learning_rate = 0.0005  # Reduced for more stable training with deeper network
-    n_epochs = 10
+    n_epochs = 5
     warmup_steps = 4000  # Increased warmup for deeper network
     gradient_clip = 0.5  # Tighter clipping for deeper network stability
     label_smoothing = 0.1
     gradient_accumulation_steps = 2  # Increased to maintain effective batch size
 
     # Data sampling for faster training
-    max_train_samples = 250
-    max_val_samples = 100
-    max_test_samples = 100
+    max_train_samples = 5000
+    max_val_samples = 500
+    max_test_samples = 500
 
     # Generation parameters
     beam_size = 5
