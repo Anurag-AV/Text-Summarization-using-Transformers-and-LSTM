@@ -46,9 +46,6 @@ class LSTMEncoder(nn.Module):
         # Unpack
         outputs, _ = nn.utils.rnn.pad_packed_sequence(packed_outputs, batch_first=True)
 
-        # outputs: (batch_size, seq_len, hidden_dim * n_directions)
-        # hidden: (n_layers * n_directions, batch_size, hidden_dim)
-        # cell: (n_layers * n_directions, batch_size, hidden_dim)
 
         return outputs, hidden, cell
 
