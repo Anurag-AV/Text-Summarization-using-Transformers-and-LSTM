@@ -201,7 +201,7 @@ def plot_training_curves(train_losses, val_losses, save_path='training_curves_ls
     
     plt.tight_layout()
     plt.savefig(save_path, dpi=300, bbox_inches='tight')
-    print(f"✓ Training curves saved to {save_path}")
+    print(f"Training curves saved to {save_path}")
     
     # Also display if in notebook
     try:
@@ -228,7 +228,7 @@ def save_checkpoint(epoch, model, optimizer, scheduler, scaler, val_loss, train_
         'val_losses': val_losses
     }
     torch.save(checkpoint, config.model_file)
-    print(f"✓ Best model saved to {config.model_file} (Val Loss: {val_loss:.4f})")
+    print(f"Best model saved to {config.model_file} (Val Loss: {val_loss:.4f})")
 
 
 def load_checkpoint(model, optimizer, scheduler, scaler, config):
@@ -261,14 +261,12 @@ def load_checkpoint(model, optimizer, scheduler, scaler, config):
 # MAIN FUNCTION
 # ============================================================================
 def main():
-    print("\n" + "=" * 80)
     print("LSTM SUMMARIZATION TRAINING")
-    print("=" * 80)
     print()
 
     # Print device information
     print("Device Information:")
-    print("-" * 80)
+    print()
     print(f"PyTorch version: {torch.__version__}")
     print(f"CUDA available: {torch.cuda.is_available()}")
     if torch.cuda.is_available():
@@ -286,7 +284,7 @@ def main():
 
     # Load tokenizer
     print("Step 1: Loading BPE Tokenizer")
-    print("-" * 80)
+    print()
     tokenizer = BPETokenizer.load(config.tokenizer_file)
     print(f"Tokenizer loaded from {config.tokenizer_file}")
     print(f"Vocabulary size: {len(tokenizer.vocab)}")
@@ -294,7 +292,7 @@ def main():
 
     # Load data
     print("Step 2: Loading Data")
-    print("-" * 80)
+    print()
 
     train_data = pd.read_csv(config.train_file, nrows=config.max_train_samples)
     val_data = pd.read_csv(config.val_file, nrows=config.max_val_samples)
@@ -358,7 +356,7 @@ def main():
 
     # Create model
     print("Step 3: Creating LSTM Model")
-    print("-" * 80)
+    print()
 
     encoder = LSTMEncoder(
         vocab_size=len(tokenizer.vocab),
@@ -378,7 +376,6 @@ def main():
         bidirectional_encoder=config.bidirectional
     )
 
-    # FIX: Pass device object instead of string
     model = Seq2Seq(encoder, decoder, device).to(device)
 
     total_params = sum(p.numel() for p in model.parameters())
@@ -417,7 +414,7 @@ def main():
         scaler = None
 
     print("Step 4: Checking for Existing Checkpoint")
-    print("-" * 80)
+    print()
     start_epoch, best_val_loss, train_losses, val_losses = load_checkpoint(
         model, optimizer, scheduler, scaler, config
     )
@@ -425,7 +422,7 @@ def main():
 
     # Training loop
     print("Step 5: Training LSTM Model")
-    print("-" * 80)
+    print()
     print(f"Total epochs: {config.n_epochs}")
     print(f"Starting from epoch: {start_epoch + 1}")
     print()
@@ -459,13 +456,13 @@ def main():
 
     # Plot training curves
     print("Step 6: Plotting Training Curves")
-    print("-" * 80)
+    print()
     plot_training_curves(train_losses, val_losses, save_path='training_curves_lstm.png')
     print()
 
     # Save vocabulary
     print("Step 7: Saving Vocabulary")
-    print("-" * 80)
+    print()
     with open(config.vocab_file, 'wb') as f:
         pickle.dump(tokenizer.vocab, f)
     print(f"Vocabulary saved to {config.vocab_file}")
@@ -477,7 +474,7 @@ def main():
 
     # Evaluation with BLEU
     print("Step 8: Final Evaluation")
-    print("-" * 80)
+    print()
 
 
     beam_search = BeamSearchLSTM(
@@ -548,19 +545,17 @@ def main():
 
     # Display top examples
     print(f"Step 9: Top {config.top_k_summaries} Generated Summaries")
-    print("=" * 80)
+    print()
 
     for i, example in enumerate(examples, 1):
         print(f"\nExample {i}:")
-        print("-" * 80)
+        print()
         print(f"Article (truncated): {example['article'][:200]}...")
         print(f"\nReference Summary: {example['reference']}")
         print(f"\nGenerated Summary: {example['generated']}")
         print()
 
-    print("=" * 80)
-    print("DONE!")
-    print("=" * 80)
+    print()
 
 
 if __name__ == "__main__":

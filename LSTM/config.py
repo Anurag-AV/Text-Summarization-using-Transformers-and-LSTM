@@ -28,9 +28,9 @@ class ConfigLSTM:
     gradient_accumulation_steps = 1
 
     # Data sampling for faster training
-    max_train_samples = 5000
-    max_val_samples = 500
-    max_test_samples = 500
+    max_train_samples = 75000
+    max_val_samples = 8000
+    max_test_samples = 8000
 
     # Generation parameters
     beam_size = 5
