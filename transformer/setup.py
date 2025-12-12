@@ -2,15 +2,12 @@
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
-from torch.utils.data import Dataset, DataLoader
+from torch.utils.data import  DataLoader
 import pandas as pd
-import numpy as np
+import numpy as n
 import pickle
 import os
-import math
-from collections import defaultdict, Counter
 from tqdm import tqdm
-import re
 import matplotlib.pyplot as plt
 from datetime import datetime
 
@@ -18,19 +15,16 @@ from datetime import datetime
 from config import Config
 from beamSearch import BeamSearch
 from transformer import Transformer
-from transformerInternals import PositionalEncoding, MultiHeadAttention, FeedForward, EncoderLayer, DecoderLayer
 from bpeTokenizer import BPETokenizer
 from bleu import BLEUScore
 from summarizer import SummarizationDataset
 
 
 
-
+# GET CONFIG
 config = Config()
 
-# ============================================================================
 # CHECKPOINT LOADING AND SAVING
-# ============================================================================
 def save_checkpoint(epoch, model, optimizer, scheduler, scaler, val_loss, train_losses, val_losses, val_bleu_scores, config):
     """Save training checkpoint with atomic write to prevent corruption"""
     checkpoint = {
@@ -40,9 +34,9 @@ def save_checkpoint(epoch, model, optimizer, scheduler, scaler, val_loss, train_
         'scheduler_state_dict': scheduler.state_dict() if scheduler else None,
         'scaler_state_dict': scaler.state_dict() if scaler else None,
         'val_loss': val_loss,
-        'train_losses': train_losses,  # Save loss history
-        'val_losses': val_losses,      # Save validation loss history
-        'val_bleu_scores': val_bleu_scores,  # Save BLEU score history
+        'train_losses': train_losses, 
+        'val_losses': val_losses, 
+        'val_bleu_scores': val_bleu_scores,
         'config': {
             'n_encoder_layers': config.n_encoder_layers,
             'n_decoder_layers': config.n_decoder_layers,
@@ -55,18 +49,16 @@ def save_checkpoint(epoch, model, optimizer, scheduler, scaler, val_loss, train_
         }
     }
     
-    # Atomic save: write to temp file first, then rename
     temp_file = config.model_file + '.tmp'
     try:
         torch.save(checkpoint, temp_file)
-        # Rename is atomic on most systems
         if os.path.exists(config.model_file):
             os.replace(temp_file, config.model_file)
         else:
             os.rename(temp_file, config.model_file)
-        print(f"✓ Checkpoint saved to {config.model_file}")
+        print(f"[Success] Checkpoint saved to {config.model_file}")
     except Exception as e:
-        print(f"✗ Error saving checkpoint: {e}")
+        print(f"[Error] Error saving checkpoint: {e}")
         if os.path.exists(temp_file):
             os.remove(temp_file)
 
@@ -79,26 +71,26 @@ def load_checkpoint(model, optimizer, scheduler, scaler, config):
     print(f"Loading checkpoint from {config.model_file}...")
     
     try:
-        # Load checkpoint with weights_only=False since we have optimizer/scheduler state
+        # Load checkpoint
         checkpoint = torch.load(config.model_file, map_location=config.device, weights_only=False)
         
         # Load model state
         model.load_state_dict(checkpoint['model_state_dict'])
-        print("✓ Model state loaded")
+        print("Model state loaded")
         
         # Load optimizer state
         optimizer.load_state_dict(checkpoint['optimizer_state_dict'])
-        print("✓ Optimizer state loaded")
+        print("Optimizer state loaded")
         
         # Load scheduler state if available
         if scheduler and checkpoint.get('scheduler_state_dict'):
             scheduler.load_state_dict(checkpoint['scheduler_state_dict'])
-            print("✓ Scheduler state loaded")
+            print("Scheduler state loaded")
         
         # Load scaler state if available
         if scaler and checkpoint.get('scaler_state_dict'):
             scaler.load_state_dict(checkpoint['scaler_state_dict'])
-            print("✓ Scaler state loaded")
+            print("Scaler state loaded")
         
         start_epoch = checkpoint['epoch'] + 1
         best_val_loss = checkpoint.get('val_loss', float('inf'))
@@ -108,9 +100,9 @@ def load_checkpoint(model, optimizer, scheduler, scaler, config):
         val_losses = checkpoint.get('val_losses', [])
         val_bleu_scores = checkpoint.get('val_bleu_scores', [])
         
-        print(f"✓ Resuming from epoch {start_epoch}")
-        print(f"✓ Best validation loss: {best_val_loss:.4f}")
-        print(f"✓ Loaded {len(train_losses)} training loss records")
+        print(f"[Success] Resuming from epoch {start_epoch}")
+        print(f"Best validation loss: {best_val_loss:.4f}")
+        print(f"Loaded {len(train_losses)} training loss records")
         
         return start_epoch, best_val_loss, train_losses, val_losses, val_bleu_scores
         
@@ -123,9 +115,9 @@ def load_checkpoint(model, optimizer, scheduler, scaler, config):
         print(f"Creating backup at: {backup_file}")
         try:
             os.rename(config.model_file, backup_file)
-            print("✓ Corrupted checkpoint backed up.")
+            print("[Success] Corrupted checkpoint backed up.")
         except:
-            print("✗ Could not backup corrupted file. Deleting it.")
+            print("[Error] Could not backup corrupted file. Deleting it.")
             os.remove(config.model_file)
         
         print("Starting training from scratch.")
@@ -165,21 +157,16 @@ def validate(model, dataloader, criterion, device, config, tokenizer=None, compu
     total_loss = 0
     num_batches = 0
 
-    # For BLEU computation
     references = []
     hypotheses = []
-    max_bleu_batches = 20  # Compute BLEU on subset for speed
+    max_bleu_batches = 20  
 
     with torch.no_grad():
         pbar = tqdm(dataloader, desc='Validating', dynamic_ncols=True)
         for batch_idx, batch in enumerate(pbar):
             src = batch['article'].to(device, non_blocking=True)
             tgt = batch['summary'].to(device, non_blocking=True)
-
-            # Create masks
             src_mask, tgt_mask = create_masks(src, tgt[:, :-1])
-
-            # Forward pass with mixed precision
             if config.device == 'cuda':
                 with torch.cuda.amp.autocast():
                     output = model(src, tgt[:, :-1], src_mask, tgt_mask)
@@ -201,7 +188,6 @@ def validate(model, dataloader, criterion, device, config, tokenizer=None, compu
                 predictions = output.argmax(dim=-1).view(src.size(0), -1)
                 
                 for i in range(src.size(0)):
-                    # Reference
                     ref_ids = tgt[i].cpu().tolist()
                     ref_ids = [id for id in ref_ids if id not in [
                         tokenizer.special_tokens['<PAD>'],
@@ -230,15 +216,10 @@ def validate(model, dataloader, criterion, device, config, tokenizer=None, compu
 
     return avg_loss, bleu_score
 
-# ============================================================================
 # TRAINING
-# ============================================================================
 def create_masks(src, tgt, pad_id=0):
     """Create masks for source and target"""
-    # Source mask (batch_size, 1, 1, src_len)
     src_mask = (src != pad_id).unsqueeze(1).unsqueeze(2)
-
-    # Target mask (causal) - convert to bool first
     tgt_len = tgt.size(1)
     tgt_mask = torch.tril(torch.ones(tgt_len, tgt_len, device=tgt.device, dtype=torch.bool)).unsqueeze(0).unsqueeze(0)
     tgt_pad_mask = (tgt != pad_id).unsqueeze(1).unsqueeze(2)
@@ -256,11 +237,8 @@ def train_epoch(model, dataloader, optimizer, criterion, device, config, scaler=
     for batch_idx, batch in enumerate(pbar):
         src = batch['article'].to(device, non_blocking=True)
         tgt = batch['summary'].to(device, non_blocking=True)
-
-        # Create masks
         src_mask, tgt_mask = create_masks(src, tgt[:, :-1])
 
-        # Mixed precision training
         if scaler is not None:
             with torch.cuda.amp.autocast():
                 output = model(src, tgt[:, :-1], src_mask, tgt_mask)
@@ -300,26 +278,13 @@ def train_epoch(model, dataloader, optimizer, criterion, device, config, scaler=
 
     return total_loss / len(dataloader)
 
-
-# ============================================================================
 # VISUALIZATION
-# ============================================================================
 def plot_training_curves(train_losses, val_losses, val_bleu_scores, save_path='training_curves.png'):
-    """
-    Plot training and validation curves
-    
-    Args:
-        train_losses: List of training losses per epoch
-        val_losses: List of validation losses per epoch (with None for non-validation epochs)
-        val_bleu_scores: List of BLEU scores per epoch (with None for non-validation epochs)
-        save_path: Path to save the plot
-    """
+
     # Filter out None values for validation metrics
     val_epochs = [i for i, loss in enumerate(val_losses) if loss is not None]
     val_losses_filtered = [loss for loss in val_losses if loss is not None]
-    val_bleu_filtered = [bleu for bleu in val_bleu_scores if bleu is not None]
-    
-    # Create figure with subplots
+    # val_bleu_filtered = [bleu for bleu in val_bleu_scores if bleu is not None]
     fig, axes = plt.subplots(1, 2, figsize=(18, 5))
     
     # Plot 1: Training Loss
@@ -368,30 +333,19 @@ def plot_training_curves(train_losses, val_losses, val_bleu_scores, save_path='t
     fig.suptitle(f'Training Progress - {len(train_losses)} Epochs', 
                  fontsize=16, fontweight='bold', y=1.02)
     
-    # Add timestamp
     timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
     fig.text(0.99, 0.01, f'Generated: {timestamp}', ha='right', fontsize=8, alpha=0.5)
     
     plt.tight_layout()
     plt.savefig(save_path, dpi=300, bbox_inches='tight')
-    print(f"✓ Training curves saved to {save_path}")
-    
-    # Also display if in notebook
-    try:
-        from IPython.display import display
-        plt.show()
-    except:
-        pass
-    
+    print(f"Training curves saved to {save_path}")    
     plt.close()
     
 
-# ============================================================================
 # MAIN EXECUTION
-# ============================================================================
-# def main():
+
 print("=" * 80)
-print("DEEPER TRANSFORMER TEXT SUMMARIZATION (WITH RESUME CAPABILITY)")
+print("TRANSFORMER TEXT SUMMARIZATION")
 print("=" * 80)
 print(f"Device: {config.device}")
 print(f"Model Depth: {config.n_encoder_layers} encoder layers, {config.n_decoder_layers} decoder layers")
@@ -418,7 +372,6 @@ if tokenizer is None:
     # Load training data
     train_df = pd.read_csv(config.train_file)
 
-    # Combine articles and summaries for tokenizer training
     texts = train_df['article'].tolist() + train_df['highlights'].tolist()
 
     tokenizer = BPETokenizer(vocab_size=config.vocab_size)
@@ -428,11 +381,11 @@ if tokenizer is None:
 
 print(f"Vocabulary size: {len(tokenizer.vocab)}")
 
-# Save vocabulary immediately
+# Save vocabulary
 print("Saving vocabulary...")
 with open(config.vocab_file, 'wb') as f:
     pickle.dump(tokenizer.vocab, f)
-print(f"✓ Vocabulary saved to {config.vocab_file}")
+print(f"Vocabulary saved to {config.vocab_file}")
 print()
 
 # Load datasets
@@ -443,7 +396,7 @@ train_df = pd.read_csv(config.train_file)
 val_df = pd.read_csv(config.val_file)
 test_df = pd.read_csv(config.test_file)
 
-# Sample datasets for faster training
+# Sampling
 if len(train_df) > config.max_train_samples:
     print(f"Sampling {config.max_train_samples} from {len(train_df)} training samples...")
     train_df = train_df.sample(n=config.max_train_samples, random_state=42)
@@ -461,12 +414,11 @@ print(f"Validation samples: {len(val_df)}")
 print(f"Test samples: {len(test_df)}")
 print()
 
-# Create datasets
 train_dataset = SummarizationDataset(train_df, tokenizer, config.max_seq_len, config.max_summary_len)
 val_dataset = SummarizationDataset(val_df, tokenizer, config.max_seq_len, config.max_summary_len)
 test_dataset = SummarizationDataset(test_df, tokenizer, config.max_seq_len, config.max_summary_len)
 
-# Create dataloaders with optimizations
+# Create dataloaders
 train_loader = DataLoader(
     train_dataset,
     batch_size=config.batch_size,
@@ -516,7 +468,6 @@ print(f"Total parameters: {total_params:,}")
 print(f"Trainable parameters: {trainable_params:,}")
 print(f"Architecture: {config.n_encoder_layers}×Encoder + {config.n_decoder_layers}×Decoder")
 
-# Compile model for PyTorch 2.0+ (significant speedup)
 if config.compile_model and hasattr(torch, 'compile'):
     print("Compiling model with torch.compile()...")
     try:
@@ -527,7 +478,7 @@ if config.compile_model and hasattr(torch, 'compile'):
 
 print()
 
-# Training setup with label smoothing
+# Training setup
 criterion = nn.CrossEntropyLoss(
     ignore_index=tokenizer.special_tokens['<PAD>'],
     label_smoothing=config.label_smoothing
@@ -553,7 +504,6 @@ scheduler = torch.optim.lr_scheduler.OneCycleLR(
 # Mixed precision training scaler
 if config.device == 'cuda':
     try:
-        # Try new API (PyTorch 2.0+)
         scaler = torch.amp.GradScaler('cuda')
     except (AttributeError, TypeError):
         # Fall back to old API
@@ -587,7 +537,7 @@ for epoch in range(start_epoch, config.n_epochs):
         epoch_start_time.record()
 
     train_loss = train_epoch(model, train_loader, optimizer, criterion, config.device, config, scaler)
-    train_losses.append(train_loss)  # Track training loss
+    train_losses.append(train_loss)  
 
     if epoch_end_time:
         epoch_end_time.record()
@@ -600,11 +550,11 @@ for epoch in range(start_epoch, config.n_epochs):
         val_loss, bleu_score = validate(model, val_loader, criterion, config.device, config, 
                                        tokenizer=tokenizer, compute_bleu=True)
         
-        val_losses.append(val_loss)  # Track validation loss
-        val_bleu_scores.append(bleu_score)  # Track BLEU score
+        val_losses.append(val_loss)  
+        val_bleu_scores.append(bleu_score)  
         
         if bleu_score is not None:
-            print(f"Train Loss: {train_loss:.4f} | Val Loss: {val_loss:.4f} | BLEU: {bleu_score:.4f}")
+            print(f"Train Loss: {train_loss:.4f} | Val Loss: {val_loss:.4f}")
         else:
             print(f"Train Loss: {train_loss:.4f} | Val Loss: {val_loss:.4f}")
 
@@ -613,8 +563,8 @@ for epoch in range(start_epoch, config.n_epochs):
             save_checkpoint(epoch, model, optimizer, scheduler, scaler, val_loss, 
                           train_losses, val_losses, val_bleu_scores, config)
     else:
-        val_losses.append(None)  # No validation this epoch
-        val_bleu_scores.append(None)  # No BLEU this epoch
+        val_losses.append(None)  
+        val_bleu_scores.append(None) 
         print(f"Train Loss: {train_loss:.4f}")
 
 print()
@@ -631,7 +581,7 @@ print()
 checkpoint = torch.load(config.model_file, weights_only=False)
 model.load_state_dict(checkpoint['model_state_dict'])
 
-# Evaluation with BLEU
+# Evaluation
 print("Step 7: Final Evaluation")
 print("-" * 80)
 
@@ -660,20 +610,17 @@ for i, batch in enumerate(tqdm(test_loader, desc='Generating summaries')):
         generated = beam_search.generate(src, src_mask)
 
     for j in range(len(generated)):
-        # Reference
         ref_ids = tgt[j].cpu().tolist()
         ref_ids = [id for id in ref_ids if id not in [tokenizer.special_tokens['<PAD>'],
                                                        tokenizer.special_tokens['<SOS>'],
                                                        tokenizer.special_tokens['<EOS>']]]
         references.append(ref_ids)
 
-        # Hypothesis
         hyp_ids = [id for id in generated[j] if id not in [tokenizer.special_tokens['<PAD>'],
                                                             tokenizer.special_tokens['<SOS>'],
                                                             tokenizer.special_tokens['<EOS>']]]
         hypotheses.append(hyp_ids)
 
-        # Save examples
         if len(examples) < config.top_k_summaries:
             article_ids = src[j].cpu().tolist()
             article_ids = [id for id in article_ids if id not in [tokenizer.special_tokens['<PAD>']]]
@@ -685,16 +632,6 @@ for i, batch in enumerate(tqdm(test_loader, desc='Generating summaries')):
             })
 
     batch_count += 1
-
-# Compute BLEU
-# bleu_results = bleu_scorer.compute(references, hypotheses)
-
-# print(f"\nBLEU Score: {bleu_results['bleu']:.4f}")
-# print(f"Brevity Penalty: {bleu_results['brevity_penalty']:.4f}")
-# print(f"Length Ratio: {bleu_results['length_ratio']:.4f}")
-# for i, prec in enumerate(bleu_results['precisions'], 1):
-#     print(f"Precision-{i}: {prec:.4f}")
-# print()
 
 # Display top examples
 print(f"Step 8: Top {config.top_k_summaries} Generated Summaries")
