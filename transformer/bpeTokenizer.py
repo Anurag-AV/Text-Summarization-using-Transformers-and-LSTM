@@ -1,21 +1,8 @@
-import torch
-import torch.nn as nn
-import torch.nn.functional as F
-from torch.utils.data import Dataset, DataLoader
-import pandas as pd
-import numpy as np
 import pickle
-import os
-import math
 from collections import defaultdict, Counter
 from tqdm import tqdm
 import re
-import matplotlib.pyplot as plt
-from datetime import datetime
-
-# ============================================================================
-# BPE TOKENIZER FROM SCRATCH (OPTIMIZED)
-# ============================================================================
+# BPE TOKENIZER 
 class BPETokenizer:
     def __init__(self, vocab_size=50000):
         self.vocab_size = vocab_size
@@ -31,23 +18,19 @@ class BPETokenizer:
         }
 
     def train(self, texts, progress=True, max_samples=1000000):
-        """Train BPE tokenizer on texts"""
         print("Training BPE tokenizer (optimized)...")
 
-        # Sample texts if too many
         if len(texts) > max_samples:
             print(f"Sampling {max_samples} texts from {len(texts)} for faster training...")
             import random
             texts = random.sample(texts, max_samples)
 
-        # Count word frequencies (optimized with batch processing)
         print("Computing word frequencies...")
         word_counter = Counter()
         for text in tqdm(texts, disable=not progress):
             words = self._pre_tokenize(text)
             word_counter.update(words)
 
-        # Keep only top words for efficiency
         max_words = 50000
         if len(word_counter) > max_words:
             print(f"Keeping top {max_words} most frequent words...")
@@ -55,21 +38,16 @@ class BPETokenizer:
         else:
             self.word_freqs = dict(word_counter)
 
-        # Initialize splits (character level)
         print("Initializing character-level splits...")
         alphabet = set()
         for word in self.word_freqs.keys():
             alphabet.update(word)
 
-        # Build initial vocabulary with special tokens
         self.vocab = self.special_tokens.copy()
         for char in sorted(alphabet):
             self.vocab[char] = len(self.vocab)
-
-        # Initialize splits with tuples for immutability (faster)
         self.splits = {word: tuple(word) for word in self.word_freqs.keys()}
 
-        # Learn merges
         num_merges = self.vocab_size - len(self.vocab)
         print(f"Learning {num_merges} merges...")
 
@@ -78,7 +56,6 @@ class BPETokenizer:
         self._build_pair_cache()
 
         for i in tqdm(range(num_merges), disable=not progress):
-            # Get most frequent pair from cache
             pair_freqs = self._compute_pair_freqs_cached()
             if not pair_freqs:
                 break
@@ -87,8 +64,6 @@ class BPETokenizer:
             merged = best_pair[0] + best_pair[1]
             self.merges[best_pair] = merged
             self.vocab[merged] = len(self.vocab)
-
-            # Update splits efficiently (only words containing the pair)
             self._update_splits_cached(best_pair, merged)
 
         print(f"Vocabulary size: {len(self.vocab)}")
@@ -119,7 +94,6 @@ class BPETokenizer:
         for pair, words in self.pair_cache.items():
             for word in words:
                 split = self.splits[word]
-                # Count occurrences of pair in this split
                 count = sum(1 for i in range(len(split) - 1)
                            if split[i] == pair[0] and split[i + 1] == pair[1])
                 pair_freqs[pair] += count * self.word_freqs[word]
@@ -128,8 +102,6 @@ class BPETokenizer:
     def _update_splits_cached(self, pair, merged):
         """Update splits only for words containing the pair"""
         words_to_update = self.pair_cache[pair].copy()
-
-        # Remove old pair from cache
         del self.pair_cache[pair]
 
         for word in words_to_update:
@@ -146,8 +118,6 @@ class BPETokenizer:
                     i += 1
 
             self.splits[word] = tuple(new_split)
-
-            # Update cache with new pairs
             for i in range(len(new_split) - 1):
                 new_pair = (new_split[i], new_split[i + 1])
                 self.pair_cache[new_pair].add(word)
@@ -170,29 +140,19 @@ class BPETokenizer:
         words = self._pre_tokenize(text)
         tokens = []
 
-        # Create merge priority lookup (lower index = higher priority)
         merge_priority = {pair: idx for idx, pair in enumerate(self.merges.keys())}
 
         for word in words:
-            # Get initial split
             split = list(word)
-
-            # Apply merges efficiently
             while len(split) > 1:
-                # Find all possible pairs
                 pairs = [(i, (split[i], split[i + 1]))
                         for i in range(len(split) - 1)]
 
-                # Filter to only valid merges and find highest priority
                 valid_merges = [(i, pair) for i, pair in pairs if pair in merge_priority]
 
                 if not valid_merges:
                     break
-
-                # Get pair with highest priority (lowest index)
                 min_pos, min_pair = min(valid_merges, key=lambda x: merge_priority[x[1]])
-
-                # Merge the pair
                 split = split[:min_pos] + [self.merges[min_pair]] + split[min_pos + 2:]
 
             tokens.extend(split)
@@ -225,8 +185,6 @@ class BPETokenizer:
             if skip_special_tokens and token in self.special_tokens:
                 continue
             tokens.append(token)
-
-        # Join tokens with spaces for readability
         return ' '.join(tokens)
 
     def save(self, filepath):
@@ -246,8 +204,6 @@ class BPETokenizer:
         """Load tokenizer"""
         with open(filepath, 'rb') as f:
             data = pickle.load(f)
-
-        # Handle both old and new pickle formats
         tokenizer = cls(data.get('vocab_size', 10000))
         tokenizer.word_freqs = data.get('word_freqs', {})
         tokenizer.splits = data.get('splits', {})

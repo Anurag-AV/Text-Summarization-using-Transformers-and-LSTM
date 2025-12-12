@@ -1,22 +1,7 @@
 
 import torch
-import torch.nn as nn
-import torch.nn.functional as F
-from torch.utils.data import Dataset, DataLoader
-import pandas as pd
-import numpy as np
-import pickle
-import os
-import math
-from collections import defaultdict, Counter
-from tqdm import tqdm
-import re
-import matplotlib.pyplot as plt
-from datetime import datetime
 
-# ============================================================================
 # HYPERPARAMETERS
-# ============================================================================
 class Config:
     # Data parameters
     train_file = '../data/train.csv'
@@ -27,29 +12,29 @@ class Config:
     vocab_size = 50000
     tokenizer_file = 'bpe_tokenizer_all.pkl'
 
-    # Model parameters (INCREASED DEPTH)
+    # Model parameters
     d_model = 512
     n_heads = 8
-    n_encoder_layers = 8  # INCREASED from 4 to 8 (2x deeper)
-    n_decoder_layers = 8  # INCREASED from 4 to 8 (2x deeper)
+    n_encoder_layers = 8  
+    n_decoder_layers = 8 
     d_ff = 2048
     dropout = 0.1
     max_seq_len = 512
     max_summary_len = 64
 
-    # Training parameters (adjusted for deeper network)
-    batch_size = 24  # Slightly reduced due to increased memory from deeper model
-    learning_rate = 0.0005  # Reduced for more stable training with deeper network
-    n_epochs = 5
-    warmup_steps = 4000  # Increased warmup for deeper network
-    gradient_clip = 0.5  # Tighter clipping for deeper network stability
+    # Training parameters
+    batch_size = 24  
+    learning_rate = 0.0005  
+    n_epochs = 50
+    warmup_steps = 4000  
+    gradient_clip = 0.5  
     label_smoothing = 0.1
-    gradient_accumulation_steps = 2  # Increased to maintain effective batch size
+    gradient_accumulation_steps = 2  
 
-    # Data sampling for faster training
-    max_train_samples = 5000
-    max_val_samples = 500
-    max_test_samples = 500
+    # Data sampling 
+    max_train_samples = 287000
+    max_val_samples = 5000
+    max_test_samples = 5000
 
     # Generation parameters
     beam_size = 5

@@ -1,23 +1,9 @@
-import torch
 import torch.nn as nn
-import torch.nn.functional as F
-from torch.utils.data import Dataset, DataLoader
-import pandas as pd
-import numpy as np
-import pickle
-import os
 import math
-from collections import defaultdict, Counter
-from tqdm import tqdm
-import re
-import matplotlib.pyplot as plt
-from datetime import datetime
 
-from transformerInternals import PositionalEncoding, MultiHeadAttention, EncoderLayer, DecoderLayer, FeedForward
+from transformerInternals import PositionalEncoding, EncoderLayer, DecoderLayer
 
-# ============================================================================
-# TRANSFORMER MODEL (with final layer norms for Pre-LN architecture)
-# ============================================================================
+# TRANSFORMER MODEL
 class Transformer(nn.Module):
     def __init__(self, vocab_size, d_model, n_heads, n_encoder_layers,
                  n_decoder_layers, d_ff, max_seq_len, dropout=0.1):
@@ -38,7 +24,6 @@ class Transformer(nn.Module):
             for _ in range(n_decoder_layers)
         ])
 
-        # Final layer norms for Pre-LN architecture
         self.encoder_norm = nn.LayerNorm(d_model)
         self.decoder_norm = nn.LayerNorm(d_model)
 
@@ -61,7 +46,6 @@ class Transformer(nn.Module):
         for layer in self.encoder_layers:
             x = layer(x, src_mask)
 
-        # Final layer norm for Pre-LN architecture
         x = self.encoder_norm(x)
         return x
 
@@ -73,7 +57,6 @@ class Transformer(nn.Module):
         for layer in self.decoder_layers:
             x = layer(x, encoder_output, src_mask, tgt_mask)
 
-        # Final layer norm for Pre-LN architecture
         x = self.decoder_norm(x)
         return x
 

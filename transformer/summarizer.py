@@ -1,21 +1,7 @@
 import torch
-import torch.nn as nn
-import torch.nn.functional as F
-from torch.utils.data import Dataset, DataLoader
-import pandas as pd
-import numpy as np
-import pickle
-import os
-import math
-from collections import defaultdict, Counter
-from tqdm import tqdm
-import re
-import matplotlib.pyplot as plt
-from datetime import datetime
+from torch.utils.data import Dataset
 
-# ============================================================================
 # SUMMARIZER
-# ============================================================================
 class SummarizationDataset(Dataset):
     def __init__(self, df, tokenizer, max_article_len, max_summary_len):
         self.df = df

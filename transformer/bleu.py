@@ -1,33 +1,17 @@
-import torch
-import torch.nn as nn
-import torch.nn.functional as F
-from torch.utils.data import Dataset, DataLoader
-import pandas as pd
-import numpy as np
-import pickle
-import os
 import math
-from collections import defaultdict, Counter
-from tqdm import tqdm
-import re
-import matplotlib.pyplot as plt
-from datetime import datetime
-# ============================================================================
+from collections import Counter
 # BLEU SCORE
-# ============================================================================
 class BLEUScore:
     def __init__(self, max_n=4):
         self.max_n = max_n
 
     def _get_ngrams(self, tokens, n):
-        """Get n-grams from tokens"""
         ngrams = []
         for i in range(len(tokens) - n + 1):
             ngrams.append(tuple(tokens[i:i+n]))
         return ngrams
 
     def _modified_precision(self, reference, hypothesis, n):
-        """Calculate modified n-gram precision"""
         ref_ngrams = Counter(self._get_ngrams(reference, n))
         hyp_ngrams = Counter(self._get_ngrams(hypothesis, n))
 
@@ -44,7 +28,6 @@ class BLEUScore:
         return numerator / denominator if denominator > 0 else 0.0
 
     def _brevity_penalty(self, reference, hypothesis):
-        """Calculate brevity penalty"""
         ref_len = len(reference)
         hyp_len = len(hypothesis)
 
@@ -56,11 +39,6 @@ class BLEUScore:
             return math.exp(1 - ref_len / hyp_len)
 
     def compute(self, references, hypotheses):
-        """
-        Compute BLEU score
-        references: list of reference token lists
-        hypotheses: list of hypothesis token lists
-        """
         assert len(references) == len(hypotheses)
 
         precisions = [[] for _ in range(self.max_n)]
@@ -77,8 +55,6 @@ class BLEUScore:
 
         # Average precisions
         avg_precisions = [sum(p) / len(p) if p else 0.0 for p in precisions]
-
-        # Geometric mean of precisions
         if min(avg_precisions) > 0:
             geo_mean = math.exp(sum(math.log(p) for p in avg_precisions) / self.max_n)
         else:
