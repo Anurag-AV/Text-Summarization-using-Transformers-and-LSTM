@@ -7,7 +7,7 @@ A PyTorch implementation of a Transformer model for abstractive text summarizati
 This project implements a sequence-to-sequence Transformer model for generating concise summaries from longer articles. The implementation includes:
 
 - **Custom BPE Tokenizer**: Efficient subword tokenization with configurable vocabulary size
-- **Deep Transformer Architecture**: Configurable encoder-decoder layers with multi-head attention
+- **Transformer Architecture**: Configurable encoder-decoder layers with multi-head attention
 - **Beam Search Decoding**: Generate high-quality summaries with length penalty
 - **BLEU Score Evaluation**: Automatic evaluation metrics for summary quality
 - **Gradient Accumulation**: Train with larger effective batch sizes
@@ -160,41 +160,6 @@ The script provides real-time monitoring:
 - Automatic checkpoint saving on improvement
 
 Training curves are automatically saved to `training_curves.png`.
-
-## 🎯 Inference
-
-To generate summaries after training:
-
-```python
-from transformer import Transformer
-from bpeTokenizer import BPETokenizer
-from beamSearch import BeamSearch
-import torch
-
-# Load tokenizer
-tokenizer = BPETokenizer.load('bpe_tokenizer_all.pkl')
-
-# Load model
-checkpoint = torch.load('transformer_summarization_deep.pt')
-model = Transformer(**checkpoint['config'])
-model.load_state_dict(checkpoint['model_state_dict'])
-model.eval()
-
-# Initialize beam search
-beam_search = BeamSearch(model, tokenizer, beam_size=5)
-
-# Generate summary
-article = "Your article text here..."
-article_ids = tokenizer.encode(article)
-src = torch.tensor([article_ids])
-src_mask = (src != 0).unsqueeze(1).unsqueeze(2)
-
-with torch.no_grad():
-    summary_ids = beam_search.generate(src, src_mask)[0]
-    summary = tokenizer.decode(summary_ids)
-    
-print(summary)
-```
 
 ## 🔧 Troubleshooting
 
